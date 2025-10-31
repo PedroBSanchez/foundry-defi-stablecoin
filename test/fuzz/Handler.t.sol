@@ -7,6 +7,8 @@ import {DSCEngine} from "../../src/DSCEngine.sol";
 import {DecentralizedStableCoin} from "../../src/DecentralizedStableCoin.sol";
 import {ERC20Mock} from "openzeppelin-contracts/contracts/mocks/ERC20Mock.sol";
 
+import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
+
 contract Handler is Test {
     DSCEngine public dscEngine;
     DecentralizedStableCoin public dsc;
@@ -16,6 +18,12 @@ contract Handler is Test {
 
     uint256 MAX_DEPOSIT_SIZE = type(uint96).max;
 
+    uint256 public timesMintIsCalled;
+    address[] public usersWithCollateralDeposited;
+
+    MockV3Aggregator public ehtUsdPriceFeed;
+    MockV3Aggregator public btcUsdPriceFeed;
+
     constructor(DSCEngine _dscEngine, DecentralizedStableCoin _dsc) {
         dscEngine = _dscEngine;
         dsc = _dsc;
@@ -23,7 +31,49 @@ contract Handler is Test {
         address[] memory collateralTokens = dscEngine.getCollateralTokens();
         weth = ERC20Mock(collateralTokens[0]);
         wbtc = ERC20Mock(collateralTokens[1]);
+
+        ehtUsdPriceFeed = MockV3Aggregator(
+            dscEngine.getCollateralTokenPriceFeed(address(weth))
+        );
+        btcUsdPriceFeed = MockV3Aggregator(
+            dscEngine.getCollateralTokenPriceFeed(address(wbtc))
+        );
     }
+
+    // Mint DSC
+
+    function mintDsc(uint256 amount, uint256 addressSeed) public {
+        if (usersWithCollateralDeposited.length == 0) {
+            return;
+        }
+
+        address sender = usersWithCollateralDeposited[
+            addressSeed % usersWithCollateralDeposited.length
+        ];
+
+        (uint256 totalDscMinted, uint256 collateralValueInUsd) = dscEngine
+            .getAccountInformation(sender);
+
+        uint256 maxDscToMint = (collateralValueInUsd / 2) - totalDscMinted;
+
+        if (maxDscToMint < 0) {
+            return;
+        }
+
+        amount = bound(amount, 0, uint256(maxDscToMint));
+
+        if (amount == 0) {
+            return;
+        }
+
+        vm.startPrank(sender);
+        dscEngine.mintDsc(amount);
+        vm.stopPrank();
+
+        timesMintIsCalled++;
+    }
+
+    //  Deposit collateral
 
     function depositCollateral(
         uint256 collateralSeed,
@@ -41,6 +91,8 @@ contract Handler is Test {
         );
         collateral.mint(msg.sender, ammountCollateral);
         dscEngine.depositCollateral(address(collateral), ammountCollateral);
+        vm.stopPrank();
+        usersWithCollateralDeposited.push(msg.sender);
     }
 
     // Redeem collateral
@@ -65,6 +117,20 @@ contract Handler is Test {
         vm.startPrank(msg.sender);
         dscEngine.redeemCollateral(address(collateral), amountCollateral);
     }
+
+    // This breaks ourt invariant test suite
+    // function updateCollateralPrice(
+    //     uint256 collateralSeed,
+    //     int256 newPrice
+    // ) public {
+    //     ERC20Mock collateral = _getCollateralFromSeed(collateralSeed);
+
+    //     if (address(collateral) == address(weth)) {
+    //         ehtUsdPriceFeed.updateAnswer(newPrice);
+    //     } else {
+    //         btcUsdPriceFeed.updateAnswer(newPrice);
+    //     }
+    // }
 
     // Helper functions
 

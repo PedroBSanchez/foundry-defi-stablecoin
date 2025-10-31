@@ -29,6 +29,7 @@ import {DecentralizedStableCoin} from "./DecentralizedStableCoin.sol";
 import {ReentrancyGuard} from "openzeppelin-contracts/contracts/security/ReentrancyGuard.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {OracleLib} from "./libraries/OracleLib.sol";
 
 /**
  * @title DSCEngine
@@ -63,6 +64,12 @@ contract DSCEngine is ReentrancyGuard {
     error DSCEngine__MintFailed();
     error DSCEngine__HealFactorOk();
     error DSCEngine__HealthFactorNotImproved();
+
+    ////////////////////
+    ///    Types     ///
+    ////////////////////
+    using OracleLib for AggregatorV3Interface;
+
     //////////////////////////////
     ///    State Variables     ///
     //////////////////////////////
@@ -430,7 +437,7 @@ contract DSCEngine is ReentrancyGuard {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(
             s_priceFeeds[token]
         );
-        (, int256 price, , , ) = priceFeed.latestRoundData();
+        (, int256 price, , ) = priceFeed.staleCheckLatestRoundData();
 
         return
             ((uint256(price) * ADDITIONAL_FEED_PRECISION) * amount) / PRECISION;
@@ -444,7 +451,7 @@ contract DSCEngine is ReentrancyGuard {
             s_priceFeeds[token]
         );
 
-        (, int256 price, , , ) = priceFeed.latestRoundData();
+        (, int256 price, , ) = priceFeed.staleCheckLatestRoundData();
 
         return
             (usdAmountInWei * PRECISION) /
@@ -472,5 +479,11 @@ contract DSCEngine is ReentrancyGuard {
         address user
     ) external view returns (uint256) {
         return s_collateralDeposited[user][token];
+    }
+
+    function getCollateralTokenPriceFeed(
+        address token
+    ) external view returns (address) {
+        return s_priceFeeds[token];
     }
 }

@@ -19,7 +19,7 @@ runs = 128
 depth = 128
 fail_on_revert = false
 
-[fmt]
+[fmt] 
 bracket_spacing = true
 int_types = "long"
 line_length = 120
